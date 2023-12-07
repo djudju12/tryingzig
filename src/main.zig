@@ -10,8 +10,8 @@ const WIDTH = 600;
 const FPS = 60;
 const DT_TIME: f32 = 1.0 / @as(f32, @floatFromInt(FPS));
 
-const BACKGROUND_COLOR = 0x000000FF;
-const PLAYER_COLOR = 0xFFFFFFFF;
+const BACKGROUND_COLOR = 0x181818FF;
+const PLAYER_COLOR = 0x523261FF;
 
 const PLAYER_RADIUS = 0.5 * ONE_METER;
 
@@ -124,12 +124,12 @@ pub fn main() !void {
             } else {} // nothing
         }
 
-        // if (keyboard[c.SDL_SCANCODE_SPACE] != 0) {
-        if (!player_jumping) {
-            player_jumping = true;
-            addAccelerationY(30 * ONE_METER);
+        if (keyboard[c.SDL_SCANCODE_SPACE] != 0) {
+            if (!player_jumping) {
+                player_jumping = true;
+                addAccelerationY(30 * ONE_METER);
+            }
         }
-        // }
 
         player_dirx = 0;
         if (keyboard[c.SDL_SCANCODE_A] != 0) {
