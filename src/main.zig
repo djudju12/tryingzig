@@ -12,53 +12,86 @@ const DT_TIME: f32 = 1.0 / @as(f32, @floatFromInt(FPS));
 
 const BACKGROUND_COLOR = 0x181818FF;
 const PLAYER_COLOR = 0x523261FF;
-
 const PLAYER_RADIUS = 0.5 * ONE_METER;
-
 const ONE_METER = 100;
 const GRAVITY = 2 * ONE_METER;
 
-var player_x: f32 = WIDTH / 2;
-var player_y: f32 = 0;
-var player_velx: f32 = 6 * ONE_METER;
-var player_vely: f32 = 2 * ONE_METER;
-var player_dirx: f32 = 0;
-var player_diry: f32 = 1;
-var player_acl: f32 = 5 * ONE_METER;
-var player_jumping: bool = false;
+const Vec2f = struct {
+    x: f32,
+    y: f32,
+
+    fn add(self: Vec2f, other: Vec2f) void {
+        self.x += other.x;
+        self.y += other.y;
+    }
+};
+
+const Rect = struct {
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+
+    fn SDL_Rect(self: Rect) c.SDL_Rect {
+        return c.SDL_Rect{
+            .h = @as(i32, @intFromFloat(self.h)),
+            .w = @as(i32, @intFromFloat(self.w)),
+            .x = @as(i32, @intFromFloat(self.x)),
+            .y = @as(i32, @intFromFloat(self.y)),
+        };
+    }
+};
+
+const Body = struct {
+    rect: Rect,
+    vel: Vec2f,
+    aceleration: f32,
+
+    fn addAcceleration(self: *Body, amount: f32) void {
+        self.aceleration += amount;
+    }
+
+    fn addVelocity(self: *Body, vel: Vec2f) void {
+        self.vel.add(vel);
+    }
+};
+
+var ball_dirx: f32 = 0;
+var ball_jumping: bool = false;
+
+var ball = Body{
+    .rect = Rect{
+        .x = WIDTH / 2,
+        .y = 0,
+        .w = 0.5 * ONE_METER,
+        .h = 0.5 * ONE_METER,
+    },
+    .vel = .{ .x = 6 * ONE_METER, .y = 0 },
+    .aceleration = 0,
+};
 
 var running: bool = true;
 
-fn addAccelerationY(amount: f32) void {
-    player_acl -= amount;
+fn ballHorizontalCollision() void {
+    const new_velx = ball.vel.x * DT_TIME * ball_dirx; // todo: remover ball_dirx
+    const new_x: f32 = math.clamp(ball.rect.x + new_velx, ball.rect.h, WIDTH - ball.rect.h);
+    ball.rect.x = new_x;
 }
 
-fn playerHorizontalCollision() void {
-    const new_velx = player_velx * DT_TIME * player_dirx;
-    const new_x: f32 = math.clamp(player_x + new_velx, PLAYER_RADIUS, WIDTH - PLAYER_RADIUS);
-    std.debug.print("x {any} dirx {any} new_x {any} velx {any} nvelx {any} ac{any}\n", .{ player_x, player_dirx, new_x, player_velx, new_velx, player_acl });
-    player_x = new_x;
-}
+fn ballVerticalCollission() void {
+    const new_vely = DT_TIME * (ball.vel.y + ball.aceleration);
+    const new_y: f32 = math.clamp(ball.rect.y + new_vely, ball.rect.h, HEIGHT - ball.rect.h);
 
-fn playerVerticalCollission() void {
-    const new_vely = DT_TIME * (player_vely + player_acl);
-    const new_y: f32 = math.clamp(player_y + new_vely, PLAYER_RADIUS, HEIGHT - PLAYER_RADIUS);
-
-    if (new_y == HEIGHT - PLAYER_RADIUS) {
-        player_acl = 0;
-        player_vely = 0;
-        player_jumping = false;
+    if (new_y == HEIGHT - ball.rect.h) {
+        ball.aceleration = 0;
+        ball.vel.y = 0;
+        ball_jumping = false;
     } else {
-        player_vely = new_vely;
-        addAccelerationY(-GRAVITY);
+        ball.vel.y = new_vely;
+        ball.addAcceleration(GRAVITY);
     }
 
-    std.debug.print("y {any} diry {any} new_y {any} vely {any} nvely {any} ac{any}\n", .{ player_y, player_diry, new_y, player_vely, new_vely, player_acl });
-    player_y = new_y;
-}
-
-fn playerRect(x: f32, y: f32) c.SDL_Rect {
-    return makeRect(x, y, PLAYER_RADIUS, 50);
+    ball.rect.y = new_y;
 }
 
 fn makeRect(x: f32, y: f32, w: f32, h: f32) c.SDL_Rect {
@@ -84,12 +117,12 @@ fn cleanUp(renderer: *c.SDL_Renderer, color: u32) void {
 }
 
 fn updateScene() void {
-    playerHorizontalCollision();
-    playerVerticalCollission();
+    ballHorizontalCollision();
+    ballVerticalCollission();
 }
 
 fn renderScene(renderer: *c.SDL_Renderer) void {
-    _ = c.filledCircleColor(renderer, @as(i16, @intFromFloat(player_x)), @as(i16, @intFromFloat(player_y)), PLAYER_RADIUS, PLAYER_COLOR);
+    _ = c.filledCircleColor(renderer, @as(i16, @intFromFloat(ball.rect.x)), @as(i16, @intFromFloat(ball.rect.y)), @as(i16, @intFromFloat(ball.rect.h)), PLAYER_COLOR);
 }
 
 pub fn main() !void {
@@ -121,37 +154,27 @@ pub fn main() !void {
                     c.SDLK_ESCAPE => running = false,
                     else => {},
                 }
-            } else {} // nothing
-        }
-
-        if (keyboard[c.SDL_SCANCODE_SPACE] != 0) {
-            if (!player_jumping) {
-                player_jumping = true;
-                addAccelerationY(30 * ONE_METER);
             }
         }
 
-        player_dirx = 0;
+        if (keyboard[c.SDL_SCANCODE_SPACE] != 0) {
+            if (!ball_jumping) {
+                ball_jumping = true;
+                ball.addAcceleration(-30 * ONE_METER);
+            }
+        }
+
+        ball_dirx = 0;
         if (keyboard[c.SDL_SCANCODE_A] != 0) {
-            player_dirx = -1;
+            ball_dirx = -1;
         }
 
         if (keyboard[c.SDL_SCANCODE_D] != 0) {
-            player_dirx = 1;
-        }
-
-        if (keyboard[c.SDL_SCANCODE_W] != 0) {
-            player_diry = -1;
-        }
-
-        if (keyboard[c.SDL_SCANCODE_S] != 0) {
-            player_diry = 1;
+            ball_dirx = 1;
         }
 
         cleanUp(renderer, BACKGROUND_COLOR);
-
         updateScene();
-
         renderScene(renderer);
 
         c.SDL_RenderPresent(renderer);
