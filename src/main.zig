@@ -78,29 +78,41 @@ var ball_dirx: f32 = 0;
 var running: bool = true;
 var paused: bool = true;
 var ball: Body = undefined;
-var wall_hole: Body = undefined;
+var walls_holes: [2]Body = undefined;
 
 fn init() void {
     ball = Body{
         .rect = .{
-            .x = WIDTH / 2,
+            .x = 50,
             .y = HEIGHT / 2,
-            .w = 0.5 * ONE_METER,
-            .h = 0.5 * ONE_METER,
+            .w = 50,
+            .h = 50,
         },
         .vel = .{ 6 * ONE_METER, 0 },
         .aceleration = 0,
     };
 
-    wall_hole = Body{
-        .rect = .{
-            .x = WIDTH - 100,
-            .y = HEIGHT / 2 - 100,
-            .w = 100,
-            .h = 300,
+    walls_holes = [_]Body{
+        .{
+            .rect = .{
+                .x = WIDTH,
+                .y = HEIGHT / 2 - 100,
+                .w = 100,
+                .h = 300,
+            },
+            .vel = .{ 1 * ONE_METER, 0 },
+            .aceleration = 0,
         },
-        .vel = .{ 1 * ONE_METER, 0 },
-        .aceleration = 0,
+        .{
+            .rect = .{
+                .x = WIDTH / 2,
+                .y = HEIGHT / 2 - 100,
+                .w = 100,
+                .h = 300,
+            },
+            .vel = .{ 1 * ONE_METER, 0 },
+            .aceleration = 0,
+        },
     };
 
     ball_dirx = 0;
@@ -194,23 +206,28 @@ fn updateScene() void {
     }
     ball.moveX(ball_dirx, ball.rect.w, WIDTH - ball.rect.w);
     ball.moveY(ball.rect.h, HEIGHT - ball.rect.h);
-    wall_hole.moveX(-1, -wall_hole.rect.w, WIDTH);
-    if (wall_hole.rect.x == -wall_hole.rect.w) {
-        wall_hole.rect.x = WIDTH;
-        wall_hole.rect.y -= 50;
-    }
 
-    for (rectsBetweenHole(wall_hole)) |rect_hole| {
-        if (circularCollision(ball.rect.w, .{ ball.rect.x, ball.rect.y }, rect_hole)) {
-            init();
+    for (&walls_holes) |*wall_hole| {
+        wall_hole.moveX(-1, -wall_hole.rect.w, WIDTH);
+        if (wall_hole.rect.x == -wall_hole.rect.w) {
+            wall_hole.rect.x = WIDTH;
+            wall_hole.rect.y -= 50;
+        }
+
+        for (rectsBetweenHole(wall_hole.*)) |rect_hole| {
+            if (circularCollision(ball.rect.w, .{ ball.rect.x, ball.rect.y }, rect_hole)) {
+                init();
+            }
         }
     }
 }
 
 fn renderScene(renderer: *c.SDL_Renderer) !void {
     try drawCircle(renderer, ball.rect.x, ball.rect.y, ball.rect.h, PLAYER_COLOR);
-    for (rectsBetweenHole(wall_hole)) |rect_hole| {
-        try drawRect(renderer, rect_hole, WALL_COLOR);
+    for (walls_holes) |wall_hole| {
+        for (rectsBetweenHole(wall_hole)) |rect_hole| {
+            try drawRect(renderer, rect_hole, WALL_COLOR);
+        }
     }
 }
 
@@ -250,6 +267,7 @@ pub fn main() !void {
         }
 
         if (keyboard[c.SDL_SCANCODE_SPACE] != 0) {
+            if (paused) paused = false;
             if (ball.aceleration > MAX_ACELERATION) ball.addAcceleration(BALL_FORCE);
         }
         ball_dirx = 0;
