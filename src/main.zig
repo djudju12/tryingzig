@@ -13,7 +13,7 @@ const FPS = 60;
 const DT_TIME: f32 = 1.0 / @as(f32, @floatFromInt(FPS));
 
 const BACKGROUND_COLOR = 0x181818FF;
-var PLAYER_COLOR: u32 = 0x52774aFF;
+const PLAYER_COLOR: u32 = 0x52774aFF;
 const WALL_COLOR = 0x3676c9FF;
 const ONE_METER = 100;
 const GRAVITY = 1 * ONE_METER;
@@ -21,37 +21,6 @@ const BALL_FORCE = -2 * ONE_METER;
 const MAX_ACELERATION = -5 * ONE_METER;
 
 const Vec2f = @Vector(2, f32);
-//     x: f32,
-//     y: f32,
-//     vec: @Vector(2, f32),
-
-//     fn init(x: f32, y: f32) Vec2f {
-//         return Vec2f{.x = x,}
-//     }
-//     fn toVector(self: Vec2f) @Vector(2, f32) {
-//         return @Vector(2, f32)
-//     }
-//     fn add(self: *Vec2f, other: Vec2f) void {
-//         self.x += other.x;
-//         self.y += other.y;
-//     }
-
-//     fn length(self: Vec2f) f32 {
-//         math.sqrt(self.x * self.x + self.y * self.y);
-//     }
-
-//     fn subVec(self: Vec2f, other: Vec2f) Vec2f {
-//         return .{ .x = self.x - other.x, .y = self.y - other.y };
-//     }
-
-//     fn addVec(self: Vec2f, other: Vec2f) Vec2f {
-//         return .{ .x = self.x + other.x, .y = self.y + other.y };
-//     }
-
-//     fn negative(self: Vec2f) Vec2f {
-//         return .{ .x = -self.x, .y = -self.y };
-//     }
-// };
 
 const Rect = struct {
     x: f32,
@@ -97,40 +66,70 @@ const Body = struct {
         self.vel[1] = new_vely;
         self.rect.y = new_y;
     }
+
+    fn moveX(self: *Body, direction: f32, left_limit: f32, right_limit: f32) void {
+        const new_velx = self.vel[0] * DT_TIME * direction; // todo: remover ball_dirx
+        const new_x: f32 = math.clamp(self.rect.x + new_velx, left_limit, right_limit);
+        self.rect.x = new_x;
+    }
 };
 
 var ball_dirx: f32 = 0;
+var running: bool = true;
+var paused: bool = true;
+var ball: Body = undefined;
+var wall_hole: Body = undefined;
 
-var ball = Body{
-    .rect = .{
-        .x = WIDTH / 2,
-        .y = HEIGHT / 2,
-        .w = 0.5 * ONE_METER,
-        .h = 0.5 * ONE_METER,
-    },
-    .vel = .{ 6 * ONE_METER, 0 },
-    .aceleration = 0,
-};
+fn init() void {
+    ball = Body{
+        .rect = .{
+            .x = WIDTH / 2,
+            .y = HEIGHT / 2,
+            .w = 0.5 * ONE_METER,
+            .h = 0.5 * ONE_METER,
+        },
+        .vel = .{ 6 * ONE_METER, 0 },
+        .aceleration = 0,
+    };
 
-var wall = Body{
-    .rect = .{
-        .x = WIDTH - 200,
-        .y = HEIGHT - 500,
-        .w = 200,
-        .h = 500,
-    },
-    .vel = .{ 3 * ONE_METER, 0 },
-    .aceleration = 0,
-};
+    wall_hole = Body{
+        .rect = .{
+            .x = WIDTH - 100,
+            .y = HEIGHT / 2 - 100,
+            .w = 100,
+            .h = 300,
+        },
+        .vel = .{ 1 * ONE_METER, 0 },
+        .aceleration = 0,
+    };
 
-fn ballHorizontalCollision() void {
+    ball_dirx = 0;
+    running = true;
+    paused = true;
+}
+
+fn rectsBetweenHole(hole: Body) [2]Rect {
+    const wall_upper: Rect = .{
+        .y = 0,
+        .x = hole.rect.x,
+        .h = hole.rect.y,
+        .w = hole.rect.w,
+    };
+
+    const wall_down: Rect = .{
+        .y = hole.rect.y + hole.rect.h,
+        .x = hole.rect.x,
+        .h = HEIGHT - hole.rect.y + hole.rect.h,
+        .w = hole.rect.w,
+    };
+
+    return .{ wall_upper, wall_down };
+}
+
+fn ballHorizontalMove() void {
     const new_velx = ball.vel[0] * DT_TIME * ball_dirx; // todo: remover ball_dirx
     const new_x: f32 = math.clamp(ball.rect.x + new_velx, ball.rect.h, WIDTH - ball.rect.h);
     ball.rect.x = new_x;
-}
-
-fn ballVerticalCollission() void {
-    ball.moveY(ball.rect.h, HEIGHT - ball.rect.h);
 }
 
 fn swapColor(color: u32) u32 {
@@ -190,19 +189,31 @@ fn circularCollision(radius: f32, center: Vec2f, collider: Rect) bool {
 }
 
 fn updateScene() void {
-    if (circularCollision(ball.rect.h, Vec2f{ ball.rect.x, ball.rect.y }, wall.rect)) {
-        PLAYER_COLOR = ~PLAYER_COLOR | 0x000000FF;
+    if (paused) {
+        return;
     }
-    ballHorizontalCollision();
-    ballVerticalCollission();
+    ball.moveX(ball_dirx, ball.rect.w, WIDTH - ball.rect.w);
+    ball.moveY(ball.rect.h, HEIGHT - ball.rect.h);
+    wall_hole.moveX(-1, -wall_hole.rect.w, WIDTH);
+    if (wall_hole.rect.x == -wall_hole.rect.w) {
+        wall_hole.rect.x = WIDTH;
+        wall_hole.rect.y -= 50;
+    }
+
+    for (rectsBetweenHole(wall_hole)) |rect_hole| {
+        if (circularCollision(ball.rect.w, .{ ball.rect.x, ball.rect.y }, rect_hole)) {
+            init();
+        }
+    }
 }
 
 fn renderScene(renderer: *c.SDL_Renderer) !void {
     try drawCircle(renderer, ball.rect.x, ball.rect.y, ball.rect.h, PLAYER_COLOR);
-    try drawRect(renderer, wall.rect, WALL_COLOR);
+    for (rectsBetweenHole(wall_hole)) |rect_hole| {
+        try drawRect(renderer, rect_hole, WALL_COLOR);
+    }
 }
 
-var running: bool = true;
 pub fn main() !void {
     if (c.SDL_Init(c.SDL_INIT_EVERYTHING) != 0) {
         c.SDL_Log("cannot init SDL: %s", c.SDL_GetError());
@@ -224,12 +235,15 @@ pub fn main() !void {
 
     const keyboard = c.SDL_GetKeyboardState(null);
 
+    init();
+
     while (running) {
         var event: c.SDL_Event = undefined;
         while (c.SDL_PollEvent(&event) != 0) {
             if (event.type == c.SDL_KEYDOWN) {
                 switch (event.key.keysym.sym) {
                     c.SDLK_ESCAPE => running = false,
+                    c.SDLK_p => paused = !paused,
                     else => {},
                 }
             }
