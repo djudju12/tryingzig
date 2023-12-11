@@ -68,9 +68,18 @@ const Body = struct {
     }
 
     fn moveX(self: *Body, direction: f32, left_limit: f32, right_limit: f32) void {
-        const new_velx = self.vel[0] * DT_TIME * direction; // todo: remover ball_dirx
+        const new_velx = self.vel[0] * DT_TIME * direction; // TODO: maybe ball_dirx and use just aceleration in the x direction
         const new_x: f32 = math.clamp(self.rect.x + new_velx, left_limit, right_limit);
         self.rect.x = new_x;
+    }
+};
+
+const Hole = struct {
+    body: Body,
+    passed: bool,
+
+    fn getRect(self: Hole) Rect {
+        return self.body.rect;
     }
 };
 
@@ -78,7 +87,8 @@ var ball_dirx: f32 = 0;
 var running: bool = true;
 var paused: bool = true;
 var ball: Body = undefined;
-var walls_holes: [2]Body = undefined;
+var walls_holes: [2]Hole = undefined;
+var points: u32 = 0;
 
 fn init() void {
     ball = Body{
@@ -92,26 +102,32 @@ fn init() void {
         .aceleration = 0,
     };
 
-    walls_holes = [_]Body{
+    walls_holes = [_]Hole{
         .{
-            .rect = .{
-                .x = WIDTH,
-                .y = HEIGHT / 2 - 100,
-                .w = 100,
-                .h = 300,
+            .body = .{
+                .rect = .{
+                    .x = WIDTH,
+                    .y = HEIGHT / 2 - 100,
+                    .w = 100,
+                    .h = 300,
+                },
+                .vel = .{ 1 * ONE_METER, 0 },
+                .aceleration = 0,
             },
-            .vel = .{ 1 * ONE_METER, 0 },
-            .aceleration = 0,
+            .passed = false,
         },
         .{
-            .rect = .{
-                .x = WIDTH / 2,
-                .y = HEIGHT / 2 - 100,
-                .w = 100,
-                .h = 300,
+            .body = .{
+                .rect = .{
+                    .x = WIDTH / 2,
+                    .y = HEIGHT / 2 - 100,
+                    .w = 100,
+                    .h = 300,
+                },
+                .vel = .{ 1 * ONE_METER, 0 },
+                .aceleration = 0,
             },
-            .vel = .{ 1 * ONE_METER, 0 },
-            .aceleration = 0,
+            .passed = false,
         },
     };
 
@@ -120,19 +136,19 @@ fn init() void {
     paused = true;
 }
 
-fn rectsBetweenHole(hole: Body) [2]Rect {
+fn rectsBetweenHole(hole: Hole) [2]Rect {
     const wall_upper: Rect = .{
         .y = 0,
-        .x = hole.rect.x,
-        .h = hole.rect.y,
-        .w = hole.rect.w,
+        .x = hole.body.rect.x,
+        .h = hole.body.rect.y,
+        .w = hole.body.rect.w,
     };
 
     const wall_down: Rect = .{
-        .y = hole.rect.y + hole.rect.h,
-        .x = hole.rect.x,
-        .h = HEIGHT - hole.rect.y + hole.rect.h,
-        .w = hole.rect.w,
+        .y = hole.body.rect.y + hole.body.rect.h,
+        .x = hole.body.rect.x,
+        .h = HEIGHT - hole.body.rect.y + hole.body.rect.h,
+        .w = hole.body.rect.w,
     };
 
     return .{ wall_upper, wall_down };
@@ -200,25 +216,36 @@ fn circularCollision(radius: f32, center: Vec2f, collider: Rect) bool {
     return vec_len < radius;
 }
 
+fn updateHole(hole: *Hole) void {
+    if (!hole.passed) {
+        if (hole.getRect().x + hole.getRect().w < ball.rect.x) {
+            hole.passed = true;
+            points += 1;
+            std.debug.print("passed. points {d}", .{points});
+        }
+    }
+
+    hole.body.moveX(-1, -hole.getRect().w, WIDTH);
+    if (hole.getRect().x == -hole.getRect().w) {
+        hole.body.rect.x = WIDTH; // TODO: a proper method to update rect
+        hole.passed = false;
+    }
+
+    for (rectsBetweenHole(hole.*)) |rect_hole| {
+        if (circularCollision(ball.rect.w, .{ ball.rect.x, ball.rect.y }, rect_hole)) {
+            init();
+        }
+    }
+}
+
 fn updateScene() void {
     if (paused) {
         return;
     }
     ball.moveX(ball_dirx, ball.rect.w, WIDTH - ball.rect.w);
     ball.moveY(ball.rect.h, HEIGHT - ball.rect.h);
-
     for (&walls_holes) |*wall_hole| {
-        wall_hole.moveX(-1, -wall_hole.rect.w, WIDTH);
-        if (wall_hole.rect.x == -wall_hole.rect.w) {
-            wall_hole.rect.x = WIDTH;
-            wall_hole.rect.y -= 50;
-        }
-
-        for (rectsBetweenHole(wall_hole.*)) |rect_hole| {
-            if (circularCollision(ball.rect.w, .{ ball.rect.x, ball.rect.y }, rect_hole)) {
-                init();
-            }
-        }
+        updateHole(wall_hole);
     }
 }
 
