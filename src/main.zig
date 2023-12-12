@@ -19,6 +19,9 @@ const ONE_METER = 100;
 const GRAVITY = 1 * ONE_METER;
 const BALL_FORCE = -2 * ONE_METER;
 const MAX_ACELERATION = -5 * ONE_METER;
+const HOLE_MAX_HEIGHT = 300;
+const HOLE_MAX_WIDTH = 100;
+const HOLE_INITIAL_Y = HOLE_MAX_HEIGHT / 2 - 100;
 
 const Vec2f = @Vector(2, f32);
 
@@ -74,12 +77,44 @@ const Body = struct {
     }
 };
 
+const HoleType = enum(u8) { BASIC, MOVING };
+
 const Hole = struct {
     body: Body,
     passed: bool,
+    tag: HoleType,
+    _flag: bool = true,
 
     fn getRect(self: Hole) Rect {
         return self.body.rect;
+    }
+
+    fn move(self: *Hole) void {
+        switch (self.tag) {
+            .BASIC => {},
+            .MOVING => {
+                const moving_factor = 3;
+                const min_y = 50;
+                if (self._flag and (self.getRect().y + self.getRect().h) > (HEIGHT - min_y)) {
+                    self._flag = false;
+                } else if (self.getRect().y < min_y) {
+                    self._flag = true;
+                }
+
+                if (self._flag) {
+                    self.body.rect.y += moving_factor;
+                } else {
+                    self.body.rect.y -= moving_factor;
+                }
+            },
+            // else => unreachable,
+        }
+
+        self.body.moveX(-1, -self.getRect().w, WIDTH);
+        if (self.getRect().x == -self.getRect().w) {
+            self.body.rect.x = WIDTH; // TODO: a proper method to update rect
+            self.passed = false;
+        }
     }
 };
 
@@ -107,27 +142,29 @@ fn init() void {
             .body = .{
                 .rect = .{
                     .x = WIDTH,
-                    .y = HEIGHT / 2 - 100,
-                    .w = 100,
-                    .h = 300,
+                    .y = HEIGHT / 2 - HOLE_MAX_WIDTH,
+                    .w = HOLE_MAX_WIDTH,
+                    .h = HOLE_MAX_HEIGHT,
                 },
                 .vel = .{ 1 * ONE_METER, 0 },
                 .aceleration = 0,
             },
             .passed = false,
+            .tag = .BASIC,
         },
         .{
             .body = .{
                 .rect = .{
                     .x = WIDTH / 2,
-                    .y = HEIGHT / 2 - 100,
-                    .w = 100,
-                    .h = 300,
+                    .y = HOLE_INITIAL_Y,
+                    .w = HOLE_MAX_WIDTH,
+                    .h = HOLE_MAX_HEIGHT,
                 },
                 .vel = .{ 1 * ONE_METER, 0 },
                 .aceleration = 0,
             },
             .passed = false,
+            .tag = .MOVING,
         },
     };
 
@@ -225,15 +262,11 @@ fn updateHole(hole: *Hole) void {
         }
     }
 
-    hole.body.moveX(-1, -hole.getRect().w, WIDTH);
-    if (hole.getRect().x == -hole.getRect().w) {
-        hole.body.rect.x = WIDTH; // TODO: a proper method to update rect
-        hole.passed = false;
-    }
+    hole.move();
 
     for (rectsBetweenHole(hole.*)) |rect_hole| {
         if (circularCollision(ball.rect.w, .{ ball.rect.x, ball.rect.y }, rect_hole)) {
-            init();
+            // init();
         }
     }
 }
