@@ -3,12 +3,14 @@ const math = std.math;
 const c = @cImport({
     @cInclude("SDL2/SDL.h");
     @cInclude("SDL2/SDL2_gfxPrimitives.h");
+    @cInclude("time.h");
+    @cInclude("stdlib.h");
 });
 
 const overlaps = c.SDL_HasIntersection;
 
 const HEIGHT = 600;
-const WIDTH = 600;
+const WIDTH = 900;
 const FPS = 60;
 const DT_TIME: f32 = 1.0 / @as(f32, @floatFromInt(FPS));
 
@@ -16,8 +18,8 @@ const BACKGROUND_COLOR = 0x181818FF;
 const PLAYER_COLOR: u32 = 0x52774aFF;
 const WALL_COLOR = 0x3676c9FF;
 const ONE_METER = 100;
-const GRAVITY = 1 * ONE_METER;
-const BALL_FORCE = -2 * ONE_METER;
+const GRAVITY = 50;
+const BALL_FORCE = -90;
 const MAX_ACELERATION = -5 * ONE_METER;
 const HOLE_MAX_HEIGHT = 300;
 const HOLE_MAX_WIDTH = 100;
@@ -90,11 +92,11 @@ const Hole = struct {
     }
 
     fn move(self: *Hole) void {
+        // TODO: if someone work on this code, make sure to make a proper moviment system
         switch (self.tag) {
             .BASIC => {},
-            // TODO: if someone work on this code, make sure to make a proper moviment system
             .MOVING => {
-                const moving_factor = 3;
+                const moving_factor = 2;
                 const min_y = 50;
                 if (self._flag and (self.getRect().y + self.getRect().h) > (HEIGHT - min_y)) {
                     self._flag = false;
@@ -129,8 +131,37 @@ const Hole = struct {
 
         self.body.moveX(-1, -self.getRect().w, WIDTH);
         if (self.getRect().x == -self.getRect().w) {
+            const some_random_num: i32 = @rem(c.rand(), 10) + 1;
+            self.body.rect.x = WIDTH;
+            self.body.rect.y = HEIGHT / 2 - HOLE_MAX_WIDTH;
+            self.body.rect.w = HOLE_MAX_WIDTH;
+            self.body.rect.h = HOLE_MAX_HEIGHT;
+
+            //  5  10  15 POINTS
+            // 80  50  30 BASIC CHANCE
+            var percentile_basic: u8 = 0;
+            var percentile_moving: u8 = 0;
             self.body.rect.x = WIDTH; // TODO: a proper method to update rect
             self.passed = false;
+            if (points < 5) {
+                percentile_basic = 8;
+                percentile_moving = 9;
+            } else if (points < 10) {
+                percentile_basic = 5;
+                percentile_moving = 7;
+            } else {
+                percentile_basic = 3;
+                percentile_moving = 6;
+            }
+
+            if (some_random_num <= percentile_basic) {
+                self.tag = .BASIC;
+            } else if (some_random_num <= percentile_moving) {
+                self.tag = .MOVING;
+            } else {
+                self.tag = .EXPADING;
+            }
+            std.debug.print("passed. points {d}\n", .{points});
         }
     }
 };
@@ -167,12 +198,12 @@ fn init() void {
                 .aceleration = 0,
             },
             .passed = false,
-            .tag = .EXPADING,
+            .tag = .BASIC,
         },
         .{
             .body = .{
                 .rect = .{
-                    .x = WIDTH / 2,
+                    .x = WIDTH - WIDTH / 2,
                     .y = HOLE_INITIAL_Y,
                     .w = HOLE_MAX_WIDTH,
                     .h = HOLE_MAX_HEIGHT,
@@ -181,7 +212,7 @@ fn init() void {
                 .aceleration = 0,
             },
             .passed = false,
-            .tag = .MOVING,
+            .tag = .BASIC,
         },
     };
 
@@ -275,15 +306,13 @@ fn updateHole(hole: *Hole) void {
         if (hole.getRect().x + hole.getRect().w < ball.rect.x) {
             hole.passed = true;
             points += 1;
-            std.debug.print("passed. points {d}", .{points});
         }
     }
 
     hole.move();
-
     for (rectsBetweenHole(hole.*)) |rect_hole| {
         if (circularCollision(ball.rect.w, .{ ball.rect.x, ball.rect.y }, rect_hole)) {
-            // init();
+            init();
         }
     }
 }
@@ -329,8 +358,8 @@ pub fn main() !void {
 
     const keyboard = c.SDL_GetKeyboardState(null);
 
+    c.srand(@as(u32, @intCast(c.time(0))));
     init();
-
     while (running) {
         var event: c.SDL_Event = undefined;
         while (c.SDL_PollEvent(&event) != 0) {
