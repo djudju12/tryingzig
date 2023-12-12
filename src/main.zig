@@ -77,7 +77,7 @@ const Body = struct {
     }
 };
 
-const HoleType = enum(u8) { BASIC, MOVING };
+const HoleType = enum(u8) { BASIC, MOVING, EXPADING };
 
 const Hole = struct {
     body: Body,
@@ -92,6 +92,7 @@ const Hole = struct {
     fn move(self: *Hole) void {
         switch (self.tag) {
             .BASIC => {},
+            // TODO: if someone work on this code, make sure to make a proper moviment system
             .MOVING => {
                 const moving_factor = 3;
                 const min_y = 50;
@@ -107,7 +108,23 @@ const Hole = struct {
                     self.body.rect.y -= moving_factor;
                 }
             },
-            // else => unreachable,
+            .EXPADING => {
+                const moving_factor = 2;
+                const min_h = 50;
+                if (self._flag and self.getRect().h > HOLE_MAX_HEIGHT) {
+                    self._flag = false;
+                } else if (self.getRect().h < min_h) {
+                    self._flag = true;
+                }
+
+                if (self._flag) {
+                    self.body.rect.h += moving_factor;
+                    self.body.rect.y = HEIGHT / 2 - self.body.rect.h / 2;
+                } else {
+                    self.body.rect.h -= moving_factor;
+                    self.body.rect.y = HEIGHT / 2 - self.body.rect.h / 2;
+                }
+            },
         }
 
         self.body.moveX(-1, -self.getRect().w, WIDTH);
@@ -150,7 +167,7 @@ fn init() void {
                 .aceleration = 0,
             },
             .passed = false,
-            .tag = .BASIC,
+            .tag = .EXPADING,
         },
         .{
             .body = .{
